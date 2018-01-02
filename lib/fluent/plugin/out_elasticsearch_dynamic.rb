@@ -215,8 +215,20 @@ module Fluent::Plugin
       retries = 0
       begin
         response = client(host).bulk body: data
-        if response['errors']
-          log.error "Could not push log to Elasticsearch: #{response}"
+
+	# patch begin
+        respObj = JSON.load(response, { max_nesting: 1})
+        errors = existsError(respObj['items'])
+	# patch ende
+
+        if respObj['errors'] && errors.size > 0 then
+          log.error "!!!ERRORS: #{respObj['errors']}"
+          log.error "  "
+          log.error "Could not push log to Elasticsearch:"
+
+          errors.each do |item|
+            log.error "#{item}"
+          end
         end
       rescue *client(host).transport.host_unreachable_exceptions => e
         if retries < 2
@@ -232,6 +244,18 @@ module Fluent::Plugin
         raise
       end
     end
+   
+    # patch begin
+    def existsError(items)
+      result = Array.new
+      items.each do |item|
+        if item['index']['status']!=201
+          result << item
+        end
+      end # items.each
+      return result
+    end #existsError
+    # patch end
 
     def eval_or_val(var)
       return var unless var.is_a?(String)
